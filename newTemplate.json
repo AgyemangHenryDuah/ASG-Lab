@@ -1,0 +1,690 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Auto Scaling with Elastic Load Balancer using CloudFormation",
+    "Resources": {
+        "MyVPC": {
+            "Type": "AWS::EC2::VPC",
+            "Properties": {
+                "CidrBlock": "10.0.0.0/16",
+                "EnableDnsSupport": true,
+                "EnableDnsHostnames": true,
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "MyVPC"
+                    }
+                ]
+            }
+        },
+        "PublicSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "MyVPC"
+                },
+                "CidrBlock": "10.0.1.0/24",
+                "AvailabilityZone": "us-west-1a",
+                "MapPublicIpOnLaunch": true,
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "PublicSubnet1"
+                    }
+                ]
+            }
+        },
+        "PublicSubnet2": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "MyVPC"
+                },
+                "CidrBlock": "10.0.2.0/24",
+                "AvailabilityZone": "us-west-1c",
+                "MapPublicIpOnLaunch": true,
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "PublicSubnet2"
+                    }
+                ]
+            }
+        },
+        "InternetGateway": {
+            "Type": "AWS::EC2::InternetGateway",
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "InternetGateway"
+                    }
+                ]
+            }
+        },
+        "AttachGateway": {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "MyVPC"
+                },
+                "InternetGatewayId": {
+                    "Ref": "InternetGateway"
+                }
+            }
+        },
+        "PublicRouteTable": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "MyVPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "PublicRouteTable"
+                    }
+                ]
+            }
+        },
+        "PublicRoute": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "AttachGateway",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "InternetGateway"
+                }
+            }
+        },
+        "PublicSubnet1RoueTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PublicSubnet1"
+                },
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable"
+                }
+            }
+        },
+        "PublicSubnet2RoueTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PublicSubnet2"
+                },
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable"
+                }
+            }
+        },
+        "MySecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Allow HTTP and SSH",
+                "VpcId": {
+                    "Ref": "MyVPC"
+                },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 80,
+                        "ToPort": 80,
+                        "SourceSecurityGroupId": {
+                            "Ref": "MyLoadBalancerSecurityGroup"
+                        }
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 22,
+                        "ToPort": 22,
+                        "CidrIp": "0.0.0.0/0"
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "-1",
+                        "CidrIp": "0.0.0.0/0"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "MySecurityGroup"
+                    }
+                ]
+            }
+        },
+        "MyLoadBalancerSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Allow HTTP",
+                "VpcId": {
+                    "Ref": "MyVPC"
+                },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 80,
+                        "ToPort": 80,
+                        "CidrIp": "0.0.0.0/0"
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "-1",
+                        "CidrIp": "0.0.0.0/0"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "MyLoadBalancerSecurityGroup"
+                    }
+                ]
+            }
+        },
+        "MyLoadBalancer": {
+            "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+            "Properties": {
+                "Scheme": "internet-facing",
+                "Type": "application",
+                "SecurityGroups": [
+                    {
+                        "Ref": "MyLoadBalancerSecurityGroup"
+                    }
+                ],
+                "Subnets": [
+                    {
+                        "Ref": "PublicSubnet1"
+                    },
+                    {
+                        "Ref": "PublicSubnet2"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "MyLoadBalancer"
+                    }
+                ]
+            }
+        },
+        "MyTargetGroup": {
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "MyVPC"
+                },
+                "Port": 80,
+                "Protocol": "HTTP",
+                "TargetType": "instance",
+                "HealthCheckPath": "/",
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckIntervalSeconds": 30,
+                "HealthCheckTimeoutSeconds": 5,
+                "HealthyThresholdCount": 2,
+                "UnhealthyThresholdCount": 2,
+                "Name": "MyTargetGroup",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "MyTargetGroup"
+                    }
+                ]
+            }
+        },
+        "MyListener": {
+            "Type": "AWS::ElasticLoadBalancingV2::Listener",
+            "Properties": {
+                "LoadBalancerArn": {
+                    "Ref": "MyLoadBalancer"
+                },
+                "Protocol": "HTTP",
+                "Port": 80,
+                "DefaultActions": [
+                    {
+                        "Type": "forward",
+                        "TargetGroupArn": {
+                            "Ref": "MyTargetGroup"
+                        }
+                    }
+                ]
+            }
+        },
+        "InstanceRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "ec2.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+                ],
+                "Path": "/"
+            }
+        },
+        "InstanceProfile": {
+            "Type": "AWS::IAM::InstanceProfile",
+            "Properties": {
+                "Path": "/",
+                "Roles": [
+                    {
+                        "Ref": "InstanceRole"
+                    }
+                ]
+            }
+        },
+        "MyLaunchTemplate": {
+            "Type": "AWS::EC2::LaunchTemplate",
+            "Properties": {
+                "LaunchTemplateName": "MyLaunchTemplate",
+                "VersionDescription": "Initial version",
+                "LaunchTemplateData": {
+                    "ImageId": "ami-094b981da55429bfc",
+                    "InstanceType": "t2.micro",
+                    "SecurityGroupIds": [
+                        {
+                            "Ref": "MySecurityGroup"
+                        }
+                    ],
+                    "IamInstanceProfile": {
+                        "Arn": {
+                            "Fn::GetAtt": [
+                                "InstanceProfile",
+                                "Arn"
+                            ]
+                        }
+                    },
+                    "UserData": {
+                        "Fn::Base64": {
+                            "Fn::Join": [
+                                "\n",
+                                [
+                                    "#!/bin/bash",
+                                    "set -e  # Exit script on error",
+                                    "",
+                                    "# Update system and install necessary packages",
+                                    "yum update -y",
+                                    "yum install -y httpd stress-ng bc",
+                                    "",
+                                    "# Define instance metadata retrieval function",
+                                    "get_metadata() {",
+                                    "  curl -s \"http://169.254.169.254/latest/meta-data/$1\" || echo \"Unavailable\"",
+                                    "}",
+                                    "",
+                                    "TOKEN=$(curl -sX PUT \"http://169.254.169.254/latest/api/token\" -H \"X-aws-ec2-metadata-token-ttl-seconds: 21600\")",
+                                    "INSTANCE_ID=$(curl -sH \"X-aws-ec2-metadata-token: $TOKEN\" http://169.254.169.254/latest/meta-data/instance-id)",
+                                    "PUBLIC_IP=$(curl -sH \"X-aws-ec2-metadata-token: $TOKEN\" http://169.254.169.254/latest/meta-data/public-ipv4)",
+                                    "",
+                                    "# Create the HTML file",
+                                    "cat <<EOF > /var/www/html/index.html",
+                                    "<!DOCTYPE html>",
+                                    "<html lang=\"en\">",
+                                    "<head>",
+                                    "  <meta charset=\"UTF-8\">",
+                                    "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">",
+                                    "  <title>AWS Instance Status</title>",
+                                    "  <style>",
+                                    "    * {",
+                                    "      margin: 0;",
+                                    "      padding: 0;",
+                                    "      box-sizing: border-box;",
+                                    "      font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif;",
+                                    "    }",
+                                    "    body {",
+                                    "      background-color: #f0f2f5;",
+                                    "      min-height: 100vh;",
+                                    "      display: flex;",
+                                    "      align-items: center;",
+                                    "      justify-content: center;",
+                                    "      padding: 1rem;",
+                                    "    }",
+                                    "    .container {",
+                                    "      width: 100%;",
+                                    "      max-width: 28rem;",
+                                    "    }",
+                                    "    .card {",
+                                    "      background-color: white;",
+                                    "      border-radius: 0.5rem;",
+                                    "      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);",
+                                    "      padding: 2rem;",
+                                    "    }",
+                                    "    .header {",
+                                    "      display: flex;",
+                                    "      align-items: center;",
+                                    "      margin-bottom: 1.5rem;",
+                                    "      border-bottom: 1px solid #eaeaea;",
+                                    "      padding-bottom: 1rem;",
+                                    "    }",
+                                    "    .aws-logo {",
+                                    "      height: 2rem;",
+                                    "      width: 2rem;",
+                                    "      color: #ff9900;",
+                                    "      margin-right: 0.75rem;",
+                                    "    }",
+                                    "    h1 {",
+                                    "      font-size: 1.5rem;",
+                                    "      font-weight: 700;",
+                                    "      color: #232f3e;",
+                                    "    }",
+                                    "    .info-section {",
+                                    "      margin-bottom: 1.5rem;",
+                                    "      display: flex;",
+                                    "      flex-direction: column;",
+                                    "      gap: 1rem;",
+                                    "    }",
+                                    "    .info-box {",
+                                    "      background-color: #f9fafb;",
+                                    "      border-radius: 0.375rem;",
+                                    "      padding: 1rem;",
+                                    "      border-left: 4px solid #ff9900;",
+                                    "    }",
+                                    "    .info-label {",
+                                    "      font-size: 0.875rem;",
+                                    "      color: #6b7280;",
+                                    "      margin-bottom: 0.25rem;",
+                                    "    }",
+                                    "    .info-value {",
+                                    "      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;",
+                                    "      font-weight: 500;",
+                                    "      color: #232f3e;",
+                                    "    }",
+                                    "    .stress-button {",
+                                    "      width: 100%;",
+                                    "      display: flex;",
+                                    "      align-items: center;",
+                                    "      justify-content: center;",
+                                    "      background-color: #ff9900;",
+                                    "      color: white;",
+                                    "      border: none;",
+                                    "      border-radius: 0.375rem;",
+                                    "      padding: 0.75rem 1rem;",
+                                    "      font-weight: 500;",
+                                    "      cursor: pointer;",
+                                    "      transition: background-color 0.2s;",
+                                    "    }",
+                                    "    .stress-button:hover {",
+                                    "      background-color: #ec7211;",
+                                    "    }",
+                                    "    .stress-button.disabled {",
+                                    "      background-color: #fee2e2;",
+                                    "      color: #b91c1c;",
+                                    "      cursor: not-allowed;",
+                                    "    }",
+                                    "    .cpu-icon {",
+                                    "      height: 1.25rem;",
+                                    "      width: 1.25rem;",
+                                    "      margin-right: 0.5rem;",
+                                    "    }",
+                                    "    .stress-indicator {",
+                                    "      margin-top: 1rem;",
+                                    "      padding: 0.75rem;",
+                                    "      background-color: #fff8e6;",
+                                    "      color: #b45309;",
+                                    "      border-radius: 0.375rem;",
+                                    "      font-size: 0.875rem;",
+                                    "      border-left: 4px solid #f59e0b;",
+                                    "    }",
+                                    "    .stress-text {",
+                                    "      font-weight: 500;",
+                                    "      margin-bottom: 0.5rem;",
+                                    "    }",
+                                    "    .progress-bar {",
+                                    "      width: 100%;",
+                                    "      height: 0.625rem;",
+                                    "      background-color: #fef3c7;",
+                                    "      border-radius: 9999px;",
+                                    "      overflow: hidden;",
+                                    "    }",
+                                    "    .progress-fill {",
+                                    "      height: 100%;",
+                                    "      width: 100%;",
+                                    "      background-color: #f59e0b;",
+                                    "      border-radius: 9999px;",
+                                    "      animation: pulse 2s ease-in-out infinite;",
+                                    "    }",
+                                    "    .hidden {",
+                                    "      display: none;",
+                                    "    }",
+                                    "    @keyframes pulse {",
+                                    "      0%, 100% {",
+                                    "        opacity: 1;",
+                                    "      }",
+                                    "      50% {",
+                                    "        opacity: 0.5;",
+                                    "      }",
+                                    "    }",
+                                    "    .footer {",
+                                    "      margin-top: 1.5rem;",
+                                    "      text-align: center;",
+                                    "      font-size: 0.75rem;",
+                                    "      color: #6b7280;",
+                                    "    }",
+                                    "  </style>",
+                                    "</head>",
+                                    "<body>",
+                                    "  <div class=\"container\">",
+                                    "    <div class=\"card\">",
+                                    "      <div class=\"header\">",
+                                    "        <svg class=\"aws-logo\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">",
+                                    "          <rect x=\"2\" y=\"2\" width=\"20\" height=\"8\" rx=\"2\" ry=\"2\"></rect>",
+                                    "          <rect x=\"2\" y=\"14\" width=\"20\" height=\"8\" rx=\"2\" ry=\"2\"></rect>",
+                                    "          <line x1=\"6\" y1=\"6\" x2=\"6.01\" y2=\"6\"></line>",
+                                    "          <line x1=\"6\" y1=\"18\" x2=\"6.01\" y2=\"18\"></line>",
+                                    "        </svg>",
+                                    "        <h1>AWS Instance Status</h1>",
+                                    "      </div>",
+                                    "      <div class=\"info-section\">",
+                                    "        <div class=\"info-box\">",
+                                    "          <p class=\"info-label\">Instance ID</p>",
+                                    "          <p class=\"info-value\" id=\"instance-id\">INSTANCE_ID</p>",
+                                    "        </div>",
+                                    "        <div class=\"info-box\">",
+                                    "          <p class=\"info-label\">IP Address</p>",
+                                    "          <p class=\"info-value\" id=\"ip-address\">IP_ADDRESS</p>",
+                                    "        </div>",
+                                    "      </div>",
+                                    "      <button id=\"stress-button\" class=\"stress-button\">",
+                                    "        <svg class=\"cpu-icon\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">",
+                                    "          <rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"2\" ry=\"2\"></rect>",
+                                    "          <rect x=\"9\" y=\"9\" width=\"6\" height=\"6\"></rect>",
+                                    "          <line x1=\"9\" y1=\"1\" x2=\"9\" y2=\"4\"></line>",
+                                    "          <line x1=\"15\" y1=\"1\" x2=\"15\" y2=\"4\"></line>",
+                                    "          <line x1=\"9\" y1=\"20\" x2=\"9\" y2=\"23\"></line>",
+                                    "          <line x1=\"15\" y1=\"20\" x2=\"15\" y2=\"23\"></line>",
+                                    "          <line x1=\"20\" y1=\"9\" x2=\"23\" y2=\"9\"></line>",
+                                    "          <line x1=\"20\" y1=\"14\" x2=\"23\" y2=\"14\"></line>",
+                                    "          <line x1=\"1\" y1=\"9\" x2=\"4\" y2=\"9\"></line>",
+                                    "          <line x1=\"1\" y1=\"14\" x2=\"4\" y2=\"14\"></line>",
+                                    "        </svg>",
+                                    "        <span>Stress CPU</span>",
+                                    "      </button>",
+                                    "      <div id=\"stress-indicator\" class=\"stress-indicator hidden\">",
+                                    "        <p class=\"stress-text\">CPU stress test in progress (60s)</p>",
+                                    "        <div class=\"progress-bar\">",
+                                    "          <div class=\"progress-fill\"></div>",
+                                    "        </div>",
+                                    "      </div>",
+                                    "      <div class=\"footer\">",
+                                    "        <p>AWS Auto Scaling Demo • EC2 Instance</p>",
+                                    "      </div>",
+                                    "    </div>",
+                                    "  </div>",
+                                    "  <script>",
+                                    "    document.addEventListener('DOMContentLoaded', function() {",
+                                    "      const stressButton = document.getElementById('stress-button');",
+                                    "      const stressIndicator = document.getElementById('stress-indicator');",
+                                    "      stressButton.addEventListener('click', function() {",
+                                    "        if (stressButton.classList.contains('disabled')) return;",
+                                    "        stressButton.classList.add('disabled');",
+                                    "        stressIndicator.classList.remove('hidden');",
+                                    "        fetch('/stress')",
+                                    "          .then(() => console.log('Stress test started'))",
+                                    "          .catch(error => {",
+                                    "            console.error('Error triggering stress test:', error);",
+                                    "          });",
+                                    "        setTimeout(function() {",
+                                    "          stressButton.classList.remove('disabled');",
+                                    "          stressIndicator.classList.add('hidden');",
+                                    "        }, 60000);",
+                                    "      });",
+                                    "    });",
+                                    "  </script>",
+                                    "</body>",
+                                    "</html>",
+                                    "EOF",
+                                    "",
+                                    "# Replace placeholders with actual instance metadata",
+                                    "sed -i \"s/INSTANCE_ID/$INSTANCE_ID/g\" /var/www/html/index.html",
+                                    "sed -i \"s/IP_ADDRESS/$PUBLIC_IP/g\" /var/www/html/index.html",
+                                    "",
+                                    "# Create the stress script",
+                                    "mkdir -p /var/www/cgi-bin/",
+                                    "cat <<EOF > /var/www/cgi-bin/stress",
+                                    "#!/bin/bash",
+                                    "echo \"Content-type: text/plain\"",
+                                    "echo \"\"",
+                                    "nohup stress-ng --cpu 4 --cpu-load 95 --cpu-method all --timeout 60 > /dev/null 2>&1 &",
+                                    "echo \"CPU stress test started for 60 seconds.\"",
+                                    "EOF",
+                                    "chmod +x /var/www/cgi-bin/stress",
+                                    "",
+                                    "cat <<EOF > /etc/httpd/conf.d/cgi.conf",
+                                    "ScriptAlias /stress \"/var/www/cgi-bin/stress\"",
+                                    "<Directory \"/var/www/cgi-bin\">",
+                                    "  AllowOverride None",
+                                    "  Options +ExecCGI",
+                                    "  AddHandler cgi-script .cgi .pl .py .sh",
+                                    "  Require all granted",
+                                    "</Directory>",
+                                    "EOF",
+                                    "",
+                                    "systemctl restart httpd",
+                                    "",
+                                    "# Start Apache service",
+                                    "systemctl enable httpd",
+                                    "systemctl start httpd",
+                                    "",
+                                    "echo \"Setup completed successfully!\""
+                                ]
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "MyAutoScalingGroup": {
+            "Type": "AWS::AutoScaling::AutoScalingGroup",
+            "UpdatePolicy": {
+                "AutoScalingRollingUpdate": {
+                    "MinInstancesInService": "1",
+                    "MaxBatchSize": "1",
+                    "PauseTime": "PT5M",
+                    "WaitOnResourceSignals": true
+                }
+            },
+            "Properties": {
+                "AutoScalingGroupName": "MyAutoScalingGroup",
+                "MinSize": "1",
+                "MaxSize": "3",
+                "DesiredCapacity": "1",
+                "VPCZoneIdentifier": [
+                    {
+                        "Ref": "PublicSubnet1"
+                    },
+                    {
+                        "Ref": "PublicSubnet2"
+                    }
+                ],
+                "LaunchTemplate": {
+                    "LaunchTemplateId": {
+                        "Ref": "MyLaunchTemplate"
+                    },
+                    "Version": {
+                        "Fn::GetAtt": [
+                            "MyLaunchTemplate",
+                            "LatestVersionNumber"
+                        ]
+                    }
+                },
+                "TargetGroupARNs": [
+                    {
+                        "Ref": "MyTargetGroup"
+                    }
+                ],
+                "HealthCheckType": "ELB",
+                "HealthCheckGracePeriod": "300",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "MyAutoScalingGroup",
+                        "PropagateAtLaunch": true
+                    }
+                ]
+            }
+        },
+        "CPUAlarmHigh": {
+            "Type": "AWS::CloudWatch::Alarm",
+            "Properties": {
+                "AlarmName": "CPUAlarmHigh",
+                "AlarmDescription": "Scale up when CPU > 50%",
+                "MetricName": "CPUUtilization",
+                "Namespace": "AWS/EC2",
+                "Statistic": "Average",
+                "Period": 60,
+                "EvaluationPeriods": 1,
+                "Threshold": 50,
+                "ComparisonOperator": "GreaterThanThreshold",
+                "AlarmActions": [
+                    {
+                        "Ref": "ScaleUpPolicy"
+                    }
+                ],
+                "Dimensions": [
+                    {
+                        "Name": "AutoScalingGroupName",
+                        "Value": {
+                            "Ref": "MyAutoScalingGroup"
+                        }
+                    }
+                ]
+            }
+        },
+        "ScaleUpPolicy": {
+            "Type": "AWS::AutoScaling::ScalingPolicy",
+            "Properties": {
+                "AutoScalingGroupName": {
+                    "Ref": "MyAutoScalingGroup"
+                },
+                "PolicyType": "SimpleScaling",
+                "AdjustmentType": "ChangeInCapacity",
+                "ScalingAdjustment": "1",
+                "Cooldown": "60"
+            }
+        }
+    },
+    "Outputs": {
+        "LoadBalancerDNS": {
+            "Description": "DNS name of the load balancer",
+            "Value": {
+                "Fn::GetAtt": [
+                    "MyLoadBalancer",
+                    "DNSName"
+                ]
+            }
+        }
+    }
+}
